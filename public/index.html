@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Bedrock Bot Player</title>
+    <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/minecraft-4">
+    <link rel="stylesheet" href="https://mc-style.netlify.app/FlaxonStyle.css">
+    <style>
+        /* Additional custom styles */
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+        }
+        .bot-status {
+            margin-top: 20px;
+            padding: 15px;
+            border: 3px solid #555555;
+            background-color: #2a2a2a;
+            display: none;
+        }
+        .bot-status.active {
+            display: block;
+        }
+        .mc-toaster {
+            z-index: 9999;
+        }
+        .logs {
+            background-color: #1a1a1a;
+            color: #55ff55;
+            font-family: monospace;
+            padding: 10px;
+            border: 3px solid #555555;
+            height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            line-height: 1.4;
+        }
+        .log-entry.error {
+            color: #ff5555;
+        }
+        .log-entry.success {
+            color: #55ff55;
+        }
+        .log-entry.info {
+            color: #5555ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="mc-navbar">
+        <a href="#" class="mc-navbar-brand">Minecraft Bedrock Bot</a>
+        <ul class="mc-navbar-items">
+            <li><a href="#" class="active">Home</a></li>
+            <li><a href="https://github.com/PrismarineJS/bedrock-protocol" target="_blank">Documentation</a></li>
+        </ul>
+    </div>
+
+    <div class="container">
+        <div class="mc-card">
+            <div class="mc-card-header">Create Minecraft Bedrock Bot</div>
+            <div class="mc-input-group">
+                <label for="serverIp">Server IP Address</label>
+                <input type="text" id="serverIp" class="mc-input" placeholder="Enter server IP address">
+            </div>
+            <div class="mc-input-group">
+                <label for="serverPort">Server Port</label>
+                <input type="number" id="serverPort" class="mc-input" placeholder="Enter server port (default: 19132)" value="19132">
+            </div>
+            <div class="mc-input-group">
+                <label for="botVersion">Bot Version</label>
+                <input type="text" id="botVersion" class="mc-input" placeholder="Enter bot version (e.g. 1.20.10)" value="1.20.10">
+            </div>
+            <button id="connectBtn" class="mc-button">Connect Bot</button>
+            <button id="disconnectBtn" class="mc-button danger" style="display: none;">Disconnect Bot</button>
+        </div>
+
+        <div id="botStatus" class="bot-status">
+            <h3>Bot Status</h3>
+            <div id="statusInfo">
+                <div class="mc-progress">
+                    <div id="connectionProgress" class="mc-progress-bar" style="width: 0%"></div>
+                    <div class="mc-progress-text">Connecting...</div>
+                </div>
+            </div>
+            <div class="logs" id="botLogs">
+                <!-- Bot logs will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <div class="mc-toaster" id="toaster">
+        <!-- Toast notifications will appear here -->
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const socket = io();
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            const serverIp = document.getElementById('serverIp');
+            const serverPort = document.getElementById('serverPort');
+            const botVersion = document.getElementById('botVersion');
+            const botStatus = document.getElementById('botStatus');
+            const statusInfo = document.getElementById('statusInfo');
+            const connectionProgress = document.getElementById('connectionProgress');
+            const botLogs = document.getElementById('botLogs');
+            const toaster = document.getElementById('toaster');
+
+            // Function to create toast notifications
+            function showToast(message, type = 'info') {
+                const toast = document.createElement('div');
+                toast.className = `mc-toast ${type}`;
+                toast.innerHTML = `
+                    <span>${message}</span>
+                    <span class="mc-toast-close">&times;</span>
+                `;
+                toaster.appendChild(toast);
+
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    toast.remove();
+                }, 5000);
+
+                // Close button functionality
+                toast.querySelector('.mc-toast-close').addEventListener('click', function() {
+                    toast.remove();
+                });
+            }
+
+            // Function to add log entries
+            function addLog(message, type = 'default') {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                logEntry.textContent = message;
+                botLogs.appendChild(logEntry);
+                botLogs.scrollTop = botLogs.scrollHeight;
+            }
+
+            // Connect button click event
+            connectBtn.addEventListener('click', function() {
+                const ip = serverIp.value.trim();
+                const port = serverPort.value.trim();
+                const version = botVersion.value.trim();
+
+                if (!ip) {
+                    showToast('Please enter a server IP address', 'error');
+                    return;
+                }
+
+                if (!port) {
+                    showToast('Please enter a server port', 'error');
+                    return;
+                }
+
+                if (!version) {
+                    showToast('Please enter a bot version', 'error');
+                    return;
+                }
+
+                // Clear previous logs
+                botLogs.innerHTML = '';
+                
+                // Update UI
+                connectBtn.disabled = true;
+                botStatus.classList.add('active');
+                connectionProgress.style.width = '10%';
+
+                // Emit connect event to server
+                socket.emit('connect_bot', {
+                    ip: ip,
+                    port: port,
+                    version: version
+                });
+
+                addLog(`Attempting to connect to ${ip}:${port} using version ${version}`, 'info');
+            });
+
+            // Disconnect button click event
+            disconnectBtn.addEventListener('click', function() {
+                socket.emit('disconnect_bot');
+                disconnectBtn.disabled = true;
+            });
+
+            // Socket events
+            socket.on('bot_connecting', function() {
+                connectionProgress.style.width = '30%';
+                addLog('Initializing connection...', 'info');
+            });
+
+            socket.on('bot_status', function(data) {
+                addLog(data.status, 'info');
+                connectionProgress.style.width = '60%';
+            });
+
+            socket.on('bot_connected', function(data) {
+                connectionProgress.style.width = '100%';
+                statusInfo.innerHTML = `<h4 class="success">Connected!</h4><p>${data.status}</p>`;
+                connectBtn.style.display = 'none';
+                disconnectBtn.style.display = 'inline-block';
+                disconnectBtn.disabled = false;
+                addLog(data.status, 'success');
+                showToast('Bot successfully connected!', 'success');
+            });
+
+            socket.on('bot_chat', function(data) {
+                addLog(`${data.sender}: ${data.message}`);
+            });
+
+            socket.on('bot_error', function(data) {
+                statusInfo.innerHTML = `<h4 class="error">Error</h4><p>${data.message}</p>`;
+                connectBtn.disabled = false;
+                connectionProgress.style.width = '0%';
+                addLog(`Error: ${data.message}`, 'error');
+                showToast(data.message, 'error');
+            });
+
+            socket.on('bot_disconnected', function() {
+                statusInfo.innerHTML = `<h4>Disconnected</h4><p>Bot has been disconnected from the server.</p>`;
+                connectBtn.style.display = 'inline-block';
+                connectBtn.disabled = false;
+                disconnectBtn.style.display = 'none';
+                connectionProgress.style.width = '0%';
+                addLog('Bot disconnected from server', 'info');
+                showToast('Bot disconnected', 'info');
+            });
+
+            // Handle connection issues
+            socket.on('connect_error', function() {
+                showToast('Connection to server failed', 'error');
+                addLog('Connection to local server failed. Make sure the Node.js server is running.', 'error');
+                connectBtn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
